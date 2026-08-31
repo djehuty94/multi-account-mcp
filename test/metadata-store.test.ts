@@ -48,6 +48,23 @@ test("metadata is atomic, contains no tokens, and is mode 0600", async () => {
   }
 });
 
+test("state-lock cleanup preserves same-file ownership-token replacement", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-state-lock-token-"));
+  try {
+    const stateDirectory = join(directory, "state");
+    const lockPath = join(stateDirectory, ".accounts.lock");
+    const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
+
+    await store.transaction(async () => {
+      await writeFile(lockPath, "2147483647 replacement-lease\n", { flag: "w" });
+    });
+
+    assert.equal(await readFile(lockPath, "utf8"), "2147483647 replacement-lease\n");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("stable Google identity cannot be silently rebound to another alias", async () => {
   const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-identity-"));
   try {

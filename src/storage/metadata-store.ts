@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import {
   constants as fsConstants,
   lstat,
@@ -37,6 +37,7 @@ const CONNECT_LOCK_NAME = ".connect.lock";
 const LOCK_WAIT_MS = 5_000;
 const LOCK_STALE_MS = 10 * 60_000;
 const CONNECT_LOCK_HEARTBEAT_MS = 30_000;
+const MAX_LOCK_BYTES = 128;
 
 async function readMetadataFile(path: string): Promise<string> {
   let handle;
@@ -259,6 +260,57 @@ async function ensureDedicatedDirectory(directory: string): Promise<void> {
   }
 }
 
+interface LockOwnership {
+  device: number;
+  inode: number;
+  contents: string;
+}
+
+async function lockPathMatchesOwnership(path: string, expected: LockOwnership): Promise<boolean> {
+  const pathStats = await lstat(path).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  });
+  if (!pathStats || pathStats.isSymbolicLink() || !pathStats.isFile()) return false;
+  if (
+    process.platform !== "win32" &&
+    (pathStats.dev !== expected.device || pathStats.ino !== expected.inode)
+  ) {
+    return false;
+  }
+
+  let handle;
+  try {
+    const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
+    const nonBlocking = "O_NONBLOCK" in fsConstants ? fsConstants.O_NONBLOCK : 0;
+    handle = await open(path, fsConstants.O_RDONLY | noFollow | nonBlocking);
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size > MAX_LOCK_BYTES) return false;
+    if (
+      process.platform !== "win32" &&
+      (stats.dev !== expected.device || stats.ino !== expected.inode)
+    ) {
+      return false;
+    }
+
+    const expectedBytes = Buffer.from(expected.contents, "utf8");
+    if (expectedBytes.length === 0 || stats.size !== expectedBytes.length) return false;
+    const actual = Buffer.alloc(expectedBytes.length);
+    let offset = 0;
+    while (offset < actual.length) {
+      const { bytesRead } = await handle.read(actual, offset, actual.length - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    return offset === expectedBytes.length && timingSafeEqual(actual, expectedBytes);
+  } catch (error) {
+    if (["ENOENT", "ELOOP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
+    throw error;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
 async function acquireStateLock(directory: string): Promise<() => Promise<void>> {
   await ensureDedicatedDirectory(directory);
   const lockPath = join(directory, LOCK_NAME);
@@ -273,8 +325,9 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
       );
       let ownedDevice = 0;
       let ownedInode = 0;
+      const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        await handle.writeFile(`${process.pid}\n`, "utf8");
+        await handle.writeFile(lockContents, "utf8");
         await handle.sync();
         const ownedStats = await handle.stat();
         ownedDevice = ownedStats.dev;
@@ -283,11 +336,11 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
         await handle.close();
       }
       return async () => {
-        const current = await lstat(lockPath).catch((error) => {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-          throw error;
-        });
-        if (current && current.dev === ownedDevice && current.ino === ownedInode) {
+        if (await lockPathMatchesOwnership(lockPath, {
+          device: ownedDevice,
+          inode: ownedInode,
+          contents: lockContents,
+        })) {
           await unlink(lockPath);
         }
       };
@@ -386,8 +439,9 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
       );
       let ownedDevice = 0;
       let ownedInode = 0;
+      const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        await handle.writeFile(`${process.pid} ${randomUUID()}\n`, "utf8");
+        await handle.writeFile(lockContents, "utf8");
         await handle.sync();
         const ownedStats = await handle.stat();
         ownedDevice = ownedStats.dev;
@@ -402,11 +456,11 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
       let heartbeatChain = Promise.resolve();
       const renew = async (): Promise<void> => {
         if (heartbeatError) return;
-        const current = await lstat(lockPath).catch((error) => {
-          if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-          throw error;
-        });
-        if (!current || current.dev !== ownedDevice || current.ino !== ownedInode) {
+        if (!(await lockPathMatchesOwnership(lockPath, {
+          device: ownedDevice,
+          inode: ownedInode,
+          contents: lockContents,
+        }))) {
           throw connectLeaseLost();
         }
         const now = new Date();
@@ -432,9 +486,13 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
           clearInterval(heartbeat);
           await heartbeatChain;
           let cleanupError = heartbeatError;
-          let current = null;
+          let ownsCurrentPath = false;
           try {
-            current = await lstat(lockPath);
+            ownsCurrentPath = await lockPathMatchesOwnership(lockPath, {
+              device: ownedDevice,
+              inode: ownedInode,
+              contents: lockContents,
+            });
           } catch (error) {
             cleanupError ??= error;
           }
@@ -443,7 +501,7 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
           } catch (error) {
             cleanupError ??= error;
           }
-          if (current && current.dev === ownedDevice && current.ino === ownedInode) {
+          if (ownsCurrentPath) {
             try {
               await unlink(lockPath);
             } catch (error) {
