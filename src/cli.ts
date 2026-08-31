@@ -209,7 +209,6 @@ async function doctor(): Promise<void> {
     if (!(await vault.getTokens(account.alias))) missingTokens.push(account.alias);
   }
 
-  console.log(`Metadata: ${store.filePath}`);
   console.log(`OAuth client in OS vault: ${clientConfigured ? "yes" : "no"}`);
   console.log(`Connected accounts: ${accounts.length}`);
   console.log(`Accounts missing vault tokens: ${missingTokens.length ? missingTokens.join(", ") : "none"}`);

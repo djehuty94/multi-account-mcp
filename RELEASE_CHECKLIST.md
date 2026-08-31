@@ -8,7 +8,7 @@ The first release is local, bring-your-own OAuth, read-only, and text-only. A ch
 
 Recorded on 2026-08-31. These checks do not replace the fresh sanitized-repository, private/public CI, GitHub-settings, or live Google-account gates below.
 
-- [x] `npm run check` passes: strict type-check, build, and 69/69 automated tests.
+- [x] `npm run check` passes: strict type-check, build, and 72/72 automated tests.
 - [x] `npm run verify:package` passes: 65 allowlisted files, synchronized private alpha/package/plugin metadata, isolated tarball installation, and the exact four-tool Drive-only MCP surface.
 - [x] The Codex plugin-creator validator accepts `.codex-plugin/plugin.json` and its `.mcp.json` reference.
 - [x] `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities.
@@ -80,7 +80,7 @@ Evidence record (non-sensitive only):
 - Test date and tester:
 - macOS and Node.js versions:
 - Synthetic aliases used:
-- Result: BLOCKED / PASS
+- Result: BLOCKED
 - Sanitized notes or follow-up issue links:
 
 ## PRE-PUBLIC — OWNER: manual source and package review
@@ -131,31 +131,31 @@ Review record:
 
 ## Controlled visibility transition
 
-- [ ] Make only the new sanitized `djehuty94/multi-account-mcp` repository public. Do not change the visibility of the predecessor working repository, and do not tag, release, publish, or announce the new repository yet.
+- [x] Make only the new sanitized `djehuty94/multi-account-mcp` repository public. Do not change the visibility of the predecessor working repository, and do not tag, release, publish, or announce the new repository yet.
 
 ## POST-PUBLIC — OWNER: GitHub security settings and green checks
 
 Immediately after visibility changes, configure and verify the controls that are available to the public repository. If a listed control is unavailable, record the exact reason and compensating control rather than silently skipping it.
 
-- [ ] Enable private vulnerability reporting so the link in `SECURITY.md` and the issue-template security link work.
-- [ ] Enable Dependabot alerts and Dependabot security updates.
-- [ ] Enable secret scanning and push protection.
-- [ ] Enable CodeQL default setup for JavaScript/TypeScript, or record why an equivalent checked-in analysis workflow is used.
-- [ ] Set the default GitHub Actions token permission to read repository contents only and disable workflow approval bypass where practical.
-- [ ] Treat `.github/rulesets/main.json` and `.github/rulesets/release-tags.json` as configuration templates only: import or recreate them in GitHub, configure any repository-specific actor/check identifiers, enable them, and inspect the effective settings. Merely committing these JSON files does not activate protection.
-- [ ] Verify the effective `main` ruleset requires the CI workflow, blocks force pushes and deletion, and requires branches to be up to date before merge; verify the effective release-tag ruleset prevents unauthorized tag updates/deletion.
-- [ ] Confirm only trusted maintainers can change repository visibility, security settings, rulesets, Actions settings, and releases.
-- [ ] Confirm repository description, topics, license detection, security policy, and default branch are correct.
-- [ ] Trigger or observe CI on the public default branch and wait until Ubuntu, macOS, Windows, and packaging checks are green.
+- [x] Enable private vulnerability reporting so the link in `SECURITY.md` and the issue-template security link work.
+- [x] Enable Dependabot alerts and Dependabot security updates.
+- [x] Enable secret scanning and push protection.
+- [x] Enable CodeQL default setup for JavaScript/TypeScript, or record why an equivalent checked-in analysis workflow is used.
+- [x] Set the default GitHub Actions token permission to read repository contents only and disable workflow approval bypass where practical.
+- [x] Treat `.github/rulesets/main.json` and `.github/rulesets/release-tags.json` as configuration templates only: import or recreate them in GitHub, configure any repository-specific actor/check identifiers, enable them, and inspect the effective settings. Merely committing these JSON files does not activate protection.
+- [x] Verify the effective `main` ruleset requires the CI workflow, blocks force pushes and deletion, and requires branches to be up to date before merge; verify the effective release-tag ruleset prevents unauthorized tag updates/deletion.
+- [x] Confirm only trusted maintainers can change repository visibility, security settings, rulesets, Actions settings, and releases.
+- [x] Confirm repository description, topics, license detection, security policy, and default branch are correct.
+- [x] Trigger or observe CI on the public default branch and wait until Ubuntu, macOS, Windows, and packaging checks are green.
 - [ ] Wait for secret-scanning backfill and CodeQL analysis to finish; confirm there are no unresolved secret-scanning, CodeQL, or high/critical dependency alerts.
 - [ ] From a logged-out browser, verify the public clone, license, security-reporting link, workflow status, issue forms, and repository metadata.
 
 Settings record:
 
-- Owner who verified settings:
-- Verification date:
-- Result: BLOCKED / PASS
-- Sanitized notes:
+- Owner who verified settings: Repository owner with Codex-assisted verification
+- Verification date: 2026-09-01
+- Result: BLOCKED
+- Sanitized notes: The repository is public with private vulnerability reporting, Dependabot alerts/security updates, secret scanning/push protection, CodeQL extended analysis, read-only workflow tokens, commit-pinned GitHub-owned Actions only, active main/tag rulesets, correct metadata, and green public CI. The record remains BLOCKED until the hardening pull request is merged, CodeQL reruns, and every residual alert is either fixed or carries an owner-approved audited disposition. The separate two-account Gmail-and-Drive live gate also remains pending.
 
 ## POST-PUBLIC — OWNER: release decision
 

@@ -30,6 +30,24 @@ function account(overrides: Partial<AccountMetadata> = {}): AccountMetadata {
   };
 }
 
+test("default state root rejects a relative environment override", () => {
+  const previous = process.env.MULTI_ACCOUNT_MCP_HOME;
+  try {
+    process.env.MULTI_ACCOUNT_MCP_HOME = "relative-state-root";
+    assert.throws(
+      () => new AccountMetadataStore(),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "UNSAFE_STORAGE_DIRECTORY");
+        assert.match((error as Error).message, /must name an absolute local directory/);
+        return true;
+      },
+    );
+  } finally {
+    if (previous === undefined) delete process.env.MULTI_ACCOUNT_MCP_HOME;
+    else process.env.MULTI_ACCOUNT_MCP_HOME = previous;
+  }
+});
+
 test("metadata is atomic, contains no tokens, and is mode 0600", async () => {
   const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-store-"));
   try {
@@ -55,11 +73,51 @@ test("state-lock cleanup preserves same-file ownership-token replacement", async
     const lockPath = join(stateDirectory, ".accounts.lock");
     const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
 
-    await store.transaction(async () => {
-      await writeFile(lockPath, "2147483647 replacement-lease\n", { flag: "w" });
-    });
+    await assert.rejects(
+      store.transaction(async () => {
+        await writeFile(lockPath, "2147483647 replacement-lease\n", { flag: "w" });
+      }),
+      (error: unknown) => {
+        assert.equal(
+          (error as { code?: string }).code,
+          "ACCOUNT_STATE_LOCK_CLEANUP_UNCERTAIN",
+        );
+        return true;
+      },
+    );
 
     assert.equal(await readFile(lockPath, "utf8"), "2147483647 replacement-lease\n");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("state-lock cleanup preserves a same-token file-identity replacement", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-state-lock-identity-"));
+  try {
+    const stateDirectory = join(directory, "state");
+    const lockPath = join(stateDirectory, ".accounts.lock");
+    const displacedPath = join(stateDirectory, ".accounts.displaced");
+    const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
+    let copiedContents = "";
+
+    await assert.rejects(
+      store.transaction(async () => {
+        copiedContents = await readFile(lockPath, "utf8");
+        await rename(lockPath, displacedPath);
+        await writeFile(lockPath, copiedContents, { flag: "wx", mode: 0o600 });
+      }),
+      (error: unknown) => {
+        assert.equal(
+          (error as { code?: string }).code,
+          "ACCOUNT_STATE_LOCK_CLEANUP_UNCERTAIN",
+        );
+        return true;
+      },
+    );
+
+    assert.notEqual(copiedContents, "");
+    assert.equal(await readFile(lockPath, "utf8"), copiedContents);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -397,6 +455,37 @@ test("account-connection lease detects path replacement and preserves the replac
       },
     );
     assert.equal(await readFile(lockPath, "utf8"), "2147483647 replacement-lease\n");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("account-connection lease rejects a same-token file-identity replacement", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-connect-identity-"));
+  try {
+    const stateDirectory = join(directory, "state");
+    const lockPath = join(stateDirectory, ".connect.lock");
+    const displacedPath = join(stateDirectory, ".connect.displaced");
+    const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
+    let copiedContents = "";
+
+    await assert.rejects(
+      store.connectLease(async (lease) => {
+        copiedContents = await readFile(lockPath, "utf8");
+        await rename(lockPath, displacedPath);
+        await writeFile(lockPath, copiedContents, { flag: "wx", mode: 0o600 });
+        await lease.assertOwned();
+      }),
+      (error: unknown) => {
+        assert.equal(
+          (error as { code?: string }).code,
+          "ACCOUNT_MUTATION_LEASE_CLEANUP_UNCERTAIN",
+        );
+        return true;
+      },
+    );
+    assert.notEqual(copiedContents, "");
+    assert.equal(await readFile(lockPath, "utf8"), copiedContents);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
