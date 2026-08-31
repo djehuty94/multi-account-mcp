@@ -85,49 +85,49 @@ Evidence record (non-sensitive only):
 
 ## PRE-PUBLIC — OWNER: manual source and package review
 
-- [ ] Review `git status --short`; every intended file is accounted for and no local credential or generated content is staged.
-- [ ] Review the complete staged diff, including source, tests, package manifest, lockfile, plugin manifest, MCP configuration, legal files, and GitHub workflow files.
-- [ ] Inspect all commit author/committer identities and confirm no private email address or unintended personal metadata will enter public history.
-- [ ] Run `git diff --cached --check` with no whitespace errors.
-- [ ] Run a credential scan across both the staged tree and Git history; investigate every match rather than relying only on filenames.
-- [ ] Confirm the cleared product identity and repository target match the identity record above.
-- [ ] Confirm the package contents contain only intended runtime, plugin, documentation, privacy, terms, security, and license files.
-- [ ] Confirm `package.json` remains `"private": true`, no npm publication script/configuration is present, and the source alpha is documented as GitHub-only.
-- [ ] Confirm `0.1.0-alpha.1` matches exactly in `package.json`, `package-lock.json`, `.codex-plugin/plugin.json`, the changelog, and every release artifact or description.
-- [ ] Validate `.codex-plugin/plugin.json` against the supported Codex plugin manifest schema/tool; confirm its MCP entrypoint, privacy/terms URLs, identity, version, and read-only capability match `.mcp.json`, `package.json`, and the documented surface.
-- [ ] Check the package file list against an automated allowlist, install the packed tarball into an empty temporary directory, and complete an MCP handshake/tool-list smoke test from that installation.
-- [ ] Confirm direct dependency licenses are compatible with MIT distribution.
-- [ ] Confirm no shared Google OAuth client, real account identifier, private URL, local absolute path, or personal data is present.
+- [x] Review `git status --short`; every intended file is accounted for and no local credential or generated content is staged.
+- [x] Review the complete staged diff, including source, tests, package manifest, lockfile, plugin manifest, MCP configuration, legal files, and GitHub workflow files.
+- [x] Inspect all commit author/committer identities and confirm no private email address or unintended personal metadata will enter public history.
+- [x] Run `git diff --cached --check` with no whitespace errors.
+- [x] Run a credential scan across both the staged tree and Git history; investigate every match rather than relying only on filenames.
+- [x] Confirm the cleared product identity and repository target match the identity record above.
+- [x] Confirm the package contents contain only intended runtime, plugin, documentation, privacy, terms, security, and license files.
+- [x] Confirm `package.json` remains `"private": true`, no npm publication script/configuration is present, and the source alpha is documented as GitHub-only.
+- [x] Confirm `0.1.0-alpha.1` matches exactly in `package.json`, `package-lock.json`, `.codex-plugin/plugin.json`, the changelog, and every release artifact or description.
+- [x] Validate `.codex-plugin/plugin.json` against the supported Codex plugin manifest schema/tool; confirm its MCP entrypoint, privacy/terms URLs, identity, version, and read-only capability match `.mcp.json`, `package.json`, and the documented surface.
+- [x] Check the package file list against an automated allowlist, install the packed tarball into an empty temporary directory, and complete an MCP handshake/tool-list smoke test from that installation.
+- [x] Confirm direct dependency licenses are compatible with MIT distribution.
+- [x] Confirm no shared Google OAuth client, real account identifier, private URL, local absolute path, or personal data is present.
 
 Review record:
 
-- Candidate commit SHA:
-- Reviewer:
-- Review date:
-- Result: BLOCKED / PASS
-- Sanitized notes or follow-up issue links:
+- Candidate code commit SHA: `6405e889bdc69cb182bd6c90ce034c9f36669878`
+- Reviewer: Codex-assisted primary review plus independent security, API, documentation, release, and Windows-lock reviews
+- Review date: 2026-09-01
+- Result: PASS for source publication; release remains blocked
+- Sanitized notes: The next commit records this evidence only. The two-account Gmail-and-Drive live gate remains pending, so no tag, GitHub Release, npm publication, or valuable-account recommendation is allowed.
 
 ## PRE-PUBLIC — OWNER: create the sanitized repository
 
-- [ ] Create a **brand-new private** repository whose exact target is `djehuty94/multi-account-mcp`.
-- [ ] Populate it from the reviewed candidate tree as a new sanitized root history. Do not change the visibility of the predecessor working repository, repoint its `origin`, push its Git history/tags, or push any of its local or remote-tracking refs to the public target.
-- [ ] From a fresh clone of the new private repository, confirm its complete commit graph and every ref contain only the intended sanitized Multi-Account MCP history and the approved public author identity—no predecessor commits, private emails, secrets, local paths, or unrelated files.
-- [ ] Compare the fresh clone's candidate tree with the reviewed source/package allowlist and record the exact commit SHA used by private CI and all later release checks.
+- [x] Create a **brand-new private** repository whose exact target is `djehuty94/multi-account-mcp`.
+- [x] Populate it from the reviewed candidate tree as a new sanitized root history. Do not change the visibility of the predecessor working repository, repoint its `origin`, push its Git history/tags, or push any of its local or remote-tracking refs to the public target.
+- [x] From a fresh clone of the new private repository, confirm its complete commit graph and every ref contain only the intended sanitized Multi-Account MCP history and the approved public author identity—no predecessor commits, private emails, secrets, local paths, or unrelated files.
+- [x] Compare the fresh clone's candidate tree with the reviewed source/package allowlist and record the exact commit SHA used by private CI and all later release checks.
 
 ## PRE-PUBLIC: private CI and reproducible verification
 
-- [ ] `npm ci` succeeds from a clean checkout using the committed lockfile.
-- [ ] `npm run check` succeeds locally on Node.js 22.
-- [ ] Automated DPoP tests validate ES256 proof signatures/claims, authorization-code-derived proof IDs, random refresh proof IDs, exactly one valid nonce retry, malformed-key rejection, refresh single-flight behavior, and absence of a bearer-refresh fallback.
-- [ ] GitHub CI succeeds in the private repository on Ubuntu, macOS, and Windows with the exact minimum supported Node.js 22.12.0.
-- [ ] The packaging job validates the actual tarball against the file allowlist, installs it in an empty directory, and completes a Drive-only MCP handshake with the exact documented tool set.
-- [ ] `npm audit` reports no unresolved production vulnerability accepted without a documented decision.
-- [ ] A clean Codex MCP installation starts, completes the standard-input/output handshake, lists only the intended tools, and shuts down cleanly.
-- [ ] All README install commands and internal documentation links work from the candidate commit.
-- [ ] The naming and manual-review evidence records both say PASS for the same candidate commit.
-- [ ] If the live test is still pending, every public-facing alpha warning accurately says so and no release tag is present.
-- [ ] The owner explicitly approves the controlled change to public visibility.
-- [ ] Review all private GitHub Actions logs for secrets or private data before changing visibility.
+- [x] `npm ci` succeeds from a clean checkout using the committed lockfile.
+- [x] `npm run check` succeeds locally on Node.js 22.
+- [x] Automated DPoP tests validate ES256 proof signatures/claims, authorization-code-derived proof IDs, random refresh proof IDs, exactly one valid nonce retry, malformed-key rejection, refresh single-flight behavior, and absence of a bearer-refresh fallback.
+- [x] GitHub CI succeeds in the private repository on Ubuntu, macOS, and Windows with the exact minimum supported Node.js 22.12.0.
+- [x] The packaging job validates the actual tarball against the file allowlist, installs it in an empty directory, and completes a Drive-only MCP handshake with the exact documented tool set.
+- [x] `npm audit` reports no unresolved production vulnerability accepted without a documented decision.
+- [x] A clean Codex MCP installation starts, completes the standard-input/output handshake, lists only the intended tools, and shuts down cleanly.
+- [x] All README install commands and internal documentation links work from the candidate commit.
+- [x] The naming and manual-review evidence records both say PASS for the same candidate commit.
+- [x] If the live test is still pending, every public-facing alpha warning accurately says so and no release tag is present.
+- [x] The owner explicitly approves the controlled change to public visibility.
+- [x] Review all private GitHub Actions logs for secrets or private data before changing visibility.
 
 ## Controlled visibility transition
 
