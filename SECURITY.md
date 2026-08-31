@@ -27,7 +27,7 @@ Never send real Google tokens. They should be revoked immediately instead.
 - Verified Google ID-token `sub` is the durable account identity.
 - Immediately before Google consent, `auth add` discloses the requested read-only access, local credential handling, MCP host/model-provider processing, and that the project operator receives nothing. It requires exact-alias acknowledgment and opens no Google authorization if that disclosure is declined.
 - After OAuth, `auth add` requires a second exact-alias confirmation after showing the verified email and requested alias on stderr. No OAuth client, refresh token, or account metadata is persisted before that binding confirmation; decline or prompt failure revokes the new grant. Duplicate existing identities fail without revocation to protect the existing grant.
-- Account connection and removal share a cross-process mutation lease with periodic heartbeats, live-process stale-lock checks, ownership assertions immediately before credential mutation or remote revocation, and conservative failure when lease cleanup is uncertain.
+- Account connection and removal share a cross-process mutation lease with periodic heartbeats, ownership assertions immediately before credential mutation or remote revocation, and conservative failure when lease cleanup is uncertain. Stale locks are detected but never deleted automatically, avoiding a race that could remove a newly acquired live lock.
 - Per-account DPoP-bound refresh tokens, their DPoP private JWKs, and the desktop OAuth client are stored in the OS credential vault through native bindings.
 - Access tokens exist only in process memory.
 - The per-account Google-client cache is reconciled against current metadata, evicting clients and captured credential closures when an account is removed or reconnected.
@@ -72,6 +72,18 @@ This is defense in depth, not proof that the server can cryptographically distin
 - Never add a plaintext token fallback. A missing/unavailable credential vault is a hard failure.
 - Preserve the prior refresh token when a refresh response omits one.
 - Treat `invalid_grant` as reauthorization-required, not a retry loop.
+
+## Stale-lock recovery
+
+Multi-Account MCP deliberately preserves a `.accounts.lock` or `.connect.lock` that is more than ten minutes old and names a process that is no longer running. Automatic stale-lock deletion is unsafe because another process could replace the file between validation and deletion.
+
+Recover only on the same local computer and user account that runs Multi-Account MCP:
+
+1. Stop every MCP host and `multi-account-mcp auth` command using this state directory, then confirm no such process remains active.
+2. For `.connect.lock`, first run `multi-account-mcp auth list` and review Multi-Account MCP in Google Account security. Reconcile any grant that exists on only one side before changing the lock.
+3. Locate the dedicated state directory: `${MULTI_ACCOUNT_MCP_HOME}/multi-account-mcp` when that override is set; otherwise `%APPDATA%\Multi-Account MCP` on Windows, `${XDG_CONFIG_HOME}/multi-account-mcp` when that variable is set, or `~/.config/multi-account-mcp` elsewhere.
+4. Move only the exact stale lock named by the error out of that directory to a private quarantine location. Never remove the state directory, `accounts.json`, the ownership marker, another lock, or any Keychain/credential-vault item as part of lock recovery.
+5. Retry once. If account state is unexpected, stop, move the quarantined lock back if its original path is free, and report the issue without attaching the lock contents.
 
 ## Public/hosted release gate
 

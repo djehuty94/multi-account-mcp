@@ -311,6 +311,50 @@ async function lockPathMatchesOwnership(path: string, expected: LockOwnership): 
   }
 }
 
+async function assertSafeLockPathIfPresent(path: string, message: string): Promise<void> {
+  const stats = await lstat(path).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  });
+  if (stats && (stats.isSymbolicLink() || !stats.isFile())) {
+    throw new MultiAccountMcpError(message, "UNSAFE_STORAGE_DIRECTORY");
+  }
+}
+
+async function assertOpenedLockStillOwnsPath(
+  path: string,
+  ownership: Pick<LockOwnership, "device" | "inode">,
+  message: string,
+): Promise<void> {
+  const stats = await lstat(path).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  });
+  if (
+    !stats ||
+    stats.isSymbolicLink() ||
+    !stats.isFile() ||
+    (process.platform !== "win32" &&
+      (stats.dev !== ownership.device || stats.ino !== ownership.inode))
+  ) {
+    throw new MultiAccountMcpError(message, "UNSAFE_STORAGE_DIRECTORY");
+  }
+}
+
+function staleStateLock(): MultiAccountMcpError {
+  return new MultiAccountMcpError(
+    "Multi-Account MCP found a stale state lock from a process that is no longer running. It was preserved because automatic deletion can race with another process. Stop all Multi-Account MCP processes, confirm none are active, then follow SECURITY.md to remove the exact `.accounts.lock` before retrying.",
+    "STALE_ACCOUNT_STATE_LOCK",
+  );
+}
+
+function staleConnectLock(): MultiAccountMcpError {
+  return new MultiAccountMcpError(
+    "Multi-Account MCP found a stale account-operation lease from a process that is no longer running. It was preserved because automatic deletion can race with another process. Do not retry automatically. Stop all Multi-Account MCP auth commands, run `multi-account-mcp auth list`, review Multi-Account MCP in Google Account security, then follow SECURITY.md to remove the exact `.connect.lock` only after reconciling both states.",
+    "STALE_ACCOUNT_CONNECTION_LOCK",
+  );
+}
+
 async function acquireStateLock(directory: string): Promise<() => Promise<void>> {
   await ensureDedicatedDirectory(directory);
   const lockPath = join(directory, LOCK_NAME);
@@ -318,6 +362,10 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
   const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
   while (true) {
     try {
+      await assertSafeLockPathIfPresent(
+        lockPath,
+        "Multi-Account MCP's state lock is unsafe.",
+      );
       const handle = await open(
         lockPath,
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
@@ -327,13 +375,28 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
       let ownedInode = 0;
       const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        await handle.writeFile(lockContents, "utf8");
-        await handle.sync();
         const ownedStats = await handle.stat();
         ownedDevice = ownedStats.dev;
         ownedInode = ownedStats.ino;
+        await assertOpenedLockStillOwnsPath(
+          lockPath,
+          { device: ownedDevice, inode: ownedInode },
+          "Multi-Account MCP's state lock changed while it was being acquired.",
+        );
+        await handle.writeFile(lockContents, "utf8");
+        await handle.sync();
       } finally {
         await handle.close();
+      }
+      if (!(await lockPathMatchesOwnership(lockPath, {
+        device: ownedDevice,
+        inode: ownedInode,
+        contents: lockContents,
+      }))) {
+        throw new MultiAccountMcpError(
+          "Multi-Account MCP's state lock changed while it was being acquired.",
+          "UNSAFE_STORAGE_DIRECTORY",
+        );
       }
       return async () => {
         if (await lockPathMatchesOwnership(lockPath, {
@@ -357,20 +420,7 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
         if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
           const holderPid = await readLockPid(lockPath);
           if (!holderPid || !processIsAlive(holderPid)) {
-            const current = await lstat(lockPath).catch((statError) => {
-              if ((statError as NodeJS.ErrnoException).code === "ENOENT") return null;
-              throw statError;
-            });
-            if (!current || current.dev !== stats.dev || current.ino !== stats.ino) continue;
-            const stalePath = join(directory, `.accounts.stale.${randomUUID()}`);
-            try {
-              await rename(lockPath, stalePath);
-              await unlink(stalePath);
-              continue;
-            } catch (renameError) {
-              if ((renameError as NodeJS.ErrnoException).code === "ENOENT") continue;
-              throw renameError;
-            }
+            throw staleStateLock();
           }
         }
       }
@@ -432,6 +482,10 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
   const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
   while (true) {
     try {
+      await assertSafeLockPathIfPresent(
+        lockPath,
+        "Multi-Account MCP's account-connection lease is unsafe.",
+      );
       const handle = await open(
         lockPath,
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
@@ -441,14 +495,37 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
       let ownedInode = 0;
       const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        await handle.writeFile(lockContents, "utf8");
-        await handle.sync();
         const ownedStats = await handle.stat();
         ownedDevice = ownedStats.dev;
         ownedInode = ownedStats.ino;
+        await assertOpenedLockStillOwnsPath(
+          lockPath,
+          { device: ownedDevice, inode: ownedInode },
+          "Multi-Account MCP's account-connection lease changed while it was being acquired.",
+        );
+        await handle.writeFile(lockContents, "utf8");
+        await handle.sync();
+        if (!(await lockPathMatchesOwnership(lockPath, {
+          device: ownedDevice,
+          inode: ownedInode,
+          contents: lockContents,
+        }))) {
+          throw connectLeaseLost();
+        }
       } catch (error) {
         await handle.close().catch(() => undefined);
-        await unlink(lockPath).catch(() => undefined);
+        try {
+          if (await lockPathMatchesOwnership(lockPath, {
+            device: ownedDevice,
+            inode: ownedInode,
+            contents: lockContents,
+          })) {
+            await unlink(lockPath);
+          }
+        } catch {
+          // Preserve uncertain state. The original error remains the most useful
+          // description, and the lock must never be deleted without ownership.
+        }
         throw error;
       }
 
@@ -534,20 +611,7 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
         if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
           const holderPid = await readLockPid(lockPath);
           if (!holderPid || !processIsAlive(holderPid)) {
-            const current = await lstat(lockPath).catch((statError) => {
-              if ((statError as NodeJS.ErrnoException).code === "ENOENT") return null;
-              throw statError;
-            });
-            if (!current || current.dev !== stats.dev || current.ino !== stats.ino) continue;
-            const stalePath = join(directory, `.connect.stale.${randomUUID()}`);
-            try {
-              await rename(lockPath, stalePath);
-              await unlink(stalePath);
-              continue;
-            } catch (renameError) {
-              if ((renameError as NodeJS.ErrnoException).code === "ENOENT") continue;
-              throw renameError;
-            }
+            throw staleConnectLock();
           }
         }
       }

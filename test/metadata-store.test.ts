@@ -65,6 +65,50 @@ test("state-lock cleanup preserves same-file ownership-token replacement", async
   }
 });
 
+test("state lock fails closed on a stale lock from a dead process", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-state-stale-"));
+  try {
+    const stateDirectory = join(directory, "state");
+    const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
+    await store.transaction(async () => undefined);
+
+    const lockPath = join(stateDirectory, ".accounts.lock");
+    const lockContents = "2147483647 stale-state-lock\n";
+    await writeFile(lockPath, lockContents, { flag: "wx", mode: 0o600 });
+    const staleTime = new Date(Date.now() - 11 * 60_000);
+    await utimes(lockPath, staleTime, staleTime);
+
+    await assert.rejects(
+      store.transaction(async () => undefined),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "STALE_ACCOUNT_STATE_LOCK");
+        assert.match((error as Error).message, /preserved because automatic deletion can race/);
+        return true;
+      },
+    );
+    assert.equal(await readFile(lockPath, "utf8"), lockContents);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("state lock refuses a symlinked lock", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-state-symlink-"));
+  try {
+    const stateDirectory = join(directory, "state");
+    const store = new AccountMetadataStore(join(stateDirectory, "accounts.json"));
+    await store.transaction(async () => undefined);
+
+    await symlink(join(directory, "outside-state-lock"), join(stateDirectory, ".accounts.lock"));
+    await assert.rejects(
+      store.transaction(async () => undefined),
+      /state lock is unsafe/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("stable Google identity cannot be silently rebound to another alias", async () => {
   const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-identity-"));
   try {
@@ -278,7 +322,7 @@ test("account-connection leases serialize separate processes", async () => {
   }
 });
 
-test("account-connection lease recovers a stale lock from a dead process", async () => {
+test("account-connection lease fails closed on a stale lock from a dead process", async () => {
   const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-connect-stale-"));
   try {
     const stateDirectory = join(directory, "state");
@@ -290,12 +334,16 @@ test("account-connection lease recovers a stale lock from a dead process", async
     const staleTime = new Date(Date.now() - 11 * 60_000);
     await utimes(lockPath, staleTime, staleTime);
 
-    let entered = false;
-    await store.connectLease(async () => {
-      entered = true;
-    });
-    assert.equal(entered, true);
-    await assert.rejects(lstat(lockPath), { code: "ENOENT" });
+    await assert.rejects(
+      store.connectLease(async () => undefined),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "STALE_ACCOUNT_CONNECTION_LOCK");
+        assert.match((error as Error).message, /preserved because automatic deletion can race/);
+        assert.match((error as Error).message, /Google Account security/);
+        return true;
+      },
+    );
+    assert.equal(await readFile(lockPath, "utf8"), "2147483647 stale-test-lease\n");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
