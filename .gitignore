@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+
+# Local configuration and OAuth material
+.env
+.env.*
+!.env.example
+.multi-account-mcp/
+client_secret*.json
+client-secrets*.json
+credentials*.json
+oauth*.json
+token*.json
+*.pem
+*.p12
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp

@@ -1,0 +1,11 @@
+* @djehuty94
+
+# Security-sensitive trust boundaries
+/.github/workflows/ @djehuty94
+/.codex-plugin/ @djehuty94
+/package.json @djehuty94
+/package-lock.json @djehuty94
+/src/auth/ @djehuty94
+/src/mcp/ @djehuty94
+/src/storage/ @djehuty94
+/SECURITY.md @djehuty94

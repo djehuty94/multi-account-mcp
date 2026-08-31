@@ -1,0 +1,95 @@
+name: Bug report
+description: Report a reproducible problem using synthetic or non-sensitive data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Multi-Account MCP for Gmail & Drive.
+
+        **Do not paste OAuth credentials, tokens, authorization URLs or codes, email or file contents, account exports, or other personal data.** Report security vulnerabilities through the private security link instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: For example, v0.1.0-alpha.1 or a full commit SHA.
+      placeholder: v0.1.0-alpha.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Ubuntu or another Linux distribution
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      description: Paste the non-sensitive output of `node --version`.
+      placeholder: v22.x.x
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Installation or startup
+        - Google OAuth connection
+        - Account selection or isolation
+        - Gmail read tools
+        - Google Drive read tools
+        - Credential vault or local metadata
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic or sacrificial accounts and redact aliases or identifiers when they are not needed.
+      placeholder: |
+        1. Run ...
+        2. Invoke ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include only sanitized error text. Do not attach raw logs until you have reviewed them for private data.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, account data, email/file contents, authorization URLs/codes, and personal information from this report.
+          required: true
+        - label: This is not a security vulnerability. I will use private vulnerability reporting for security issues.
+          required: true

@@ -1,0 +1,71 @@
+{
+  "name": "multi-account-mcp",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "Local-first, read-only MCP for multiple Gmail and Google Drive accounts.",
+  "keywords": [
+    "mcp",
+    "gmail",
+    "google-drive",
+    "multi-account",
+    "oauth2",
+    "local-first",
+    "read-only"
+  ],
+  "homepage": "https://github.com/djehuty94/multi-account-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/djehuty94/multi-account-mcp/issues"
+  },
+  "author": {
+    "name": "Roman Kastl",
+    "url": "https://github.com/djehuty94"
+  },
+  "packageManager": "npm@10.9.8",
+  "type": "module",
+  "bin": {
+    "multi-account-mcp": "./dist/src/cli.js"
+  },
+  "files": [
+    ".codex-plugin",
+    ".mcp.json",
+    "dist/src",
+    "LICENSE",
+    "PRIVACY.md",
+    "README.md",
+    "SECURITY.md",
+    "TERMS.md",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "check": "npm run typecheck && npm test && npm run build",
+    "verify:package": "node scripts/verify-package.mjs",
+    "release:check": "npm run check && npm run verify:package",
+    "prepack": "npm run check",
+    "start": "node dist/src/cli.js mcp"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/djehuty94/multi-account-mcp"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@napi-rs/keyring": "2.0.0",
+    "entities": "8.0.0",
+    "google-auth-library": "11.0.2",
+    "sanitize-html": "2.17.7",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/sanitize-html": "2.16.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

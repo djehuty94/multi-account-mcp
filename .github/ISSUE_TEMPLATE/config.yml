@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability privately
+    url: https://github.com/djehuty94/multi-account-mcp/security/advisories/new
+    about: Do not disclose vulnerabilities, credentials, or private account data in a public issue.
+  - name: Read the security policy
+    url: https://github.com/djehuty94/multi-account-mcp/blob/main/SECURITY.md
+    about: Review the supported alpha boundary and safe-reporting guidance.

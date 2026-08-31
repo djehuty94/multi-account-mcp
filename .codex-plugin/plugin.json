@@ -1,0 +1,30 @@
+{
+  "name": "multi-account-mcp",
+  "version": "0.1.0-alpha.1",
+  "description": "Local-first, read-only MCP for multiple Gmail and Google Drive accounts.",
+  "author": {
+    "name": "Roman Kastl",
+    "url": "https://github.com/djehuty94"
+  },
+  "homepage": "https://github.com/djehuty94/multi-account-mcp",
+  "repository": "https://github.com/djehuty94/multi-account-mcp",
+  "license": "MIT",
+  "keywords": ["gmail", "google-drive", "mcp", "multi-account", "privacy"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Multi-Account MCP",
+    "shortDescription": "Read multiple Gmail and Drive accounts.",
+    "longDescription": "A local-first, read-only MCP for searching and reading multiple explicitly selected Gmail and Google Drive accounts. DPoP-bound refresh tokens, per-account DPoP private keys, and OAuth client credentials stay in the operating-system credential vault; access and ID tokens remain process-local.",
+    "developerName": "Roman Kastl",
+    "category": "Productivity",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/djehuty94/multi-account-mcp",
+    "privacyPolicyURL": "https://github.com/djehuty94/multi-account-mcp/blob/main/PRIVACY.md",
+    "termsOfServiceURL": "https://github.com/djehuty94/multi-account-mcp/blob/main/TERMS.md",
+    "defaultPrompt": [
+      "List the Google account aliases I can choose from.",
+      "Find a file in the Google Drive account aliases I name.",
+      "Search the Gmail account aliases I name when Gmail tools are enabled."
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose an improvement that fits the local, read-only trust boundary.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Multi-Account MCP for Gmail & Drive v0.1 is intentionally local, bring-your-own OAuth, read-only, and text-only. Requests that add write actions, arbitrary URL fetching, hosted token storage, or broader Google scopes require a separate security design and will not be treated as small enhancements.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem or limitation should this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful behavior, including how the user selects an account.
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and privacy impact
+      description: Note any new scope, data retention, network destination, credential access, or prompt-injection exposure. Write "None identified" if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Alpha scope
+      options:
+        - label: I understand that v0.1.0-alpha.1 is local, bring-your-own OAuth, read-only, and text-only.
+          required: true

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "multi-account-mcp": {
+      "title": "Multi-Account MCP",
+      "description": "Read-only access across multiple explicitly selected Gmail and Google Drive accounts.",
+      "cwd": ".",
+      "command": "node",
+      "args": ["./dist/src/cli.js", "mcp"]
+    }
+  }
+}
