@@ -6,9 +6,9 @@ The first release is local, bring-your-own OAuth, read-only, and text-only. A ch
 
 ## Current local automated evidence
 
-Recorded on 2026-08-31. These checks do not replace the fresh sanitized-repository, private/public CI, GitHub-settings, or live Google-account gates below.
+Recorded on 2026-09-01. These checks do not replace the fresh sanitized-repository, private/public CI, GitHub-settings, or live Google-account gates below.
 
-- [x] `npm run check` passes: strict type-check, build, and 72/72 automated tests.
+- [x] `npm run check` passes: strict type-check, build, and the 73-test suite (72 pass locally; one Windows-only contract test is skipped outside Windows).
 - [x] `npm run verify:package` passes: 65 allowlisted files, synchronized private alpha/package/plugin metadata, isolated tarball installation, and the exact four-tool Drive-only MCP surface.
 - [x] The Codex plugin-creator validator accepts `.codex-plugin/plugin.json` and its `.mcp.json` reference.
 - [x] `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities.

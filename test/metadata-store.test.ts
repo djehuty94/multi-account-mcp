@@ -50,7 +50,7 @@ test("default state root rejects a relative environment override", () => {
 });
 
 test(
-  "Windows path and handle file identities are comparable",
+  "Windows pathname identity remains anchored to an authoritative open handle",
   { skip: process.platform !== "win32" },
   async () => {
     const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-identity-"));
@@ -65,24 +65,21 @@ test(
       assert.deepEqual(
         {
           bothRegularFiles: handleStats.isFile() && pathStats.isFile(),
-          rawDeviceMatches: handleStats.dev === pathStats.dev,
-          low32DeviceMatches:
-            BigInt.asUintN(32, handleStats.dev) === BigInt.asUintN(32, pathStats.dev),
-          handleDeviceIsZero: handleStats.dev === 0n,
-          pathDeviceIsZero: pathStats.dev === 0n,
-          inodeMatches: handleStats.ino === pathStats.ino,
-          handleInodeIsZero: handleStats.ino === 0n,
-          pathInodeIsZero: pathStats.ino === 0n,
+          handleDeviceAvailable: BigInt.asUintN(32, handleStats.dev) !== 0n,
+          handleFileIdAvailable: handleStats.ino !== 0n,
+          pathFileIdAvailable: pathStats.ino !== 0n,
+          fileIdMatches: handleStats.ino === pathStats.ino,
+          pathDeviceAcceptable:
+            pathStats.dev === 0n ||
+            BigInt.asUintN(32, pathStats.dev) === BigInt.asUintN(32, handleStats.dev),
         },
         {
           bothRegularFiles: true,
-          rawDeviceMatches: true,
-          low32DeviceMatches: true,
-          handleDeviceIsZero: false,
-          pathDeviceIsZero: false,
-          inodeMatches: true,
-          handleInodeIsZero: false,
-          pathInodeIsZero: false,
+          handleDeviceAvailable: true,
+          handleFileIdAvailable: true,
+          pathFileIdAvailable: true,
+          fileIdMatches: true,
+          pathDeviceAcceptable: true,
         },
       );
     } finally {

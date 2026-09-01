@@ -291,28 +291,36 @@ function lockIdentityMatches(
   const actualDevice = comparableDeviceId(stats.dev);
   return (
     expectedDevice !== 0n &&
-    expected.inode !== 0n &&
+    actualDevice !== 0n &&
     actualDevice === expectedDevice &&
+    expected.inode !== 0n &&
+    stats.ino !== 0n &&
     stats.ino === expected.inode
   );
+}
+
+function lockPathIdentityMatches(
+  stats: { dev: bigint; ino: bigint },
+  expected: Pick<LockOwnership, "device" | "inode">,
+): boolean {
+  // Node can return dev=0 for a Windows pathname lstat while fstat on the
+  // already-opened file returns the volume serial. Only pathname checkpoints
+  // may use the exact nonzero file ID alone; reopened handles must still pass
+  // the strict device-and-file-ID comparison above.
+  if (process.platform === "win32" && comparableDeviceId(stats.dev) === 0n) {
+    return (
+      comparableDeviceId(expected.device) !== 0n &&
+      expected.inode !== 0n &&
+      stats.ino !== 0n &&
+      stats.ino === expected.inode
+    );
+  }
+  return lockIdentityMatches(stats, expected);
 }
 
 async function lockPathMatchesOwnership(path: string, expected: LockOwnership): Promise<boolean> {
   let handle;
   try {
-    const initialPathStats = await lstat(path, { bigint: true }).catch((error) => {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    });
-    if (
-      !initialPathStats ||
-      initialPathStats.isSymbolicLink() ||
-      !initialPathStats.isFile() ||
-      !lockIdentityMatches(initialPathStats, expected)
-    ) {
-      return false;
-    }
-
     const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
     const nonBlocking = "O_NONBLOCK" in fsConstants ? fsConstants.O_NONBLOCK : 0;
     handle = await open(path, fsConstants.O_RDONLY | noFollow | nonBlocking);
@@ -344,7 +352,7 @@ async function lockPathMatchesOwnership(path: string, expected: LockOwnership): 
       !pathStats ||
       pathStats.isSymbolicLink() ||
       !pathStats.isFile() ||
-      !lockIdentityMatches(pathStats, expected)
+      !lockPathIdentityMatches(pathStats, expected)
     ) {
       return false;
     }
@@ -380,7 +388,7 @@ async function assertOpenedLockStillOwnsPath(
     !stats ||
     stats.isSymbolicLink() ||
     !stats.isFile() ||
-    !lockIdentityMatches(stats, ownership)
+    !lockPathIdentityMatches(stats, ownership)
   ) {
     throw new MultiAccountMcpError(message, "UNSAFE_STORAGE_DIRECTORY");
   }
@@ -513,8 +521,10 @@ async function readLockPid(path: string): Promise<number | null> {
     if (
       !openedStats.isFile() ||
       openedStats.size > BigInt(MAX_LOCK_BYTES) ||
-      comparableDeviceId(openedStats.dev) === 0n ||
-      openedStats.ino === 0n
+      !lockIdentityMatches(openedStats, {
+        device: openedStats.dev,
+        inode: openedStats.ino,
+      })
     ) {
       return null;
     }
@@ -528,8 +538,10 @@ async function readLockPid(path: string): Promise<number | null> {
       !pathStats ||
       pathStats.isSymbolicLink() ||
       !pathStats.isFile() ||
-      comparableDeviceId(pathStats.dev) !== comparableDeviceId(openedStats.dev) ||
-      pathStats.ino !== openedStats.ino
+      !lockPathIdentityMatches(pathStats, {
+        device: openedStats.dev,
+        inode: openedStats.ino,
+      })
     ) {
       return null;
     }
