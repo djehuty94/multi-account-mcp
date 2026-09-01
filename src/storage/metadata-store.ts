@@ -10,24 +10,34 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, parse, resolve } from "node:path";
+import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { MultiAccountMcpError } from "../errors.js";
 import type { AccountFile, AccountMetadata } from "../types.js";
 import { assertValidAlias } from "../policy/input.js";
 
 function defaultConfigDirectory(): string {
   const override = process.env.MULTI_ACCOUNT_MCP_HOME;
-  if (override) return join(resolve(override), "multi-account-mcp");
+  if (override) return join(assertAbsoluteConfigRoot(override, "MULTI_ACCOUNT_MCP_HOME"), "multi-account-mcp");
 
   if (process.platform === "win32") {
     const appData = process.env.APPDATA;
-    if (appData) return join(appData, "Multi-Account MCP");
+    if (appData) return join(assertAbsoluteConfigRoot(appData, "APPDATA"), "Multi-Account MCP");
   }
 
   const xdgConfig = process.env.XDG_CONFIG_HOME;
   return xdgConfig
-    ? join(xdgConfig, "multi-account-mcp")
+    ? join(assertAbsoluteConfigRoot(xdgConfig, "XDG_CONFIG_HOME"), "multi-account-mcp")
     : join(homedir(), ".config", "multi-account-mcp");
+}
+
+function assertAbsoluteConfigRoot(root: string, variable: string): string {
+  if (!isAbsolute(root)) {
+    throw new MultiAccountMcpError(
+      `${variable} must name an absolute local directory.`,
+      "UNSAFE_STORAGE_DIRECTORY",
+    );
+  }
+  return resolve(root);
 }
 
 const MAX_METADATA_BYTES = 1_000_000;
@@ -261,40 +271,70 @@ async function ensureDedicatedDirectory(directory: string): Promise<void> {
 }
 
 interface LockOwnership {
-  device: number;
-  inode: number;
+  device: bigint;
+  inode: bigint;
   contents: string;
 }
 
-async function lockPathMatchesOwnership(path: string, expected: LockOwnership): Promise<boolean> {
-  const pathStats = await lstat(path).catch((error) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  });
-  if (!pathStats || pathStats.isSymbolicLink() || !pathStats.isFile()) return false;
-  if (
-    process.platform !== "win32" &&
-    (pathStats.dev !== expected.device || pathStats.ino !== expected.inode)
-  ) {
-    return false;
-  }
+function comparableDeviceId(device: bigint): bigint {
+  // Node 22.12's bundled libuv can report the Windows volume serial at
+  // different widths for path stat and handle stat. Upstream libuv #4698
+  // standardized both on the low unsigned 32 bits.
+  return process.platform === "win32" ? BigInt.asUintN(32, device) : device;
+}
 
+function lockIdentityMatches(
+  stats: { dev: bigint; ino: bigint },
+  expected: Pick<LockOwnership, "device" | "inode">,
+): boolean {
+  const expectedDevice = comparableDeviceId(expected.device);
+  const actualDevice = comparableDeviceId(stats.dev);
+  return (
+    expectedDevice !== 0n &&
+    actualDevice !== 0n &&
+    actualDevice === expectedDevice &&
+    expected.inode !== 0n &&
+    stats.ino !== 0n &&
+    stats.ino === expected.inode
+  );
+}
+
+function lockPathIdentityMatches(
+  stats: { dev: bigint; ino: bigint },
+  expected: Pick<LockOwnership, "device" | "inode">,
+): boolean {
+  // Node can return dev=0 for a Windows pathname lstat while fstat on the
+  // already-opened file returns the volume serial. Only pathname checkpoints
+  // may use the exact nonzero file ID alone; reopened handles must still pass
+  // the strict device-and-file-ID comparison above.
+  if (process.platform === "win32" && comparableDeviceId(stats.dev) === 0n) {
+    return (
+      comparableDeviceId(expected.device) !== 0n &&
+      expected.inode !== 0n &&
+      stats.ino !== 0n &&
+      stats.ino === expected.inode
+    );
+  }
+  return lockIdentityMatches(stats, expected);
+}
+
+async function lockPathMatchesOwnership(path: string, expected: LockOwnership): Promise<boolean> {
   let handle;
   try {
     const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
     const nonBlocking = "O_NONBLOCK" in fsConstants ? fsConstants.O_NONBLOCK : 0;
     handle = await open(path, fsConstants.O_RDONLY | noFollow | nonBlocking);
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size > MAX_LOCK_BYTES) return false;
+    const stats = await handle.stat({ bigint: true });
     if (
-      process.platform !== "win32" &&
-      (stats.dev !== expected.device || stats.ino !== expected.inode)
+      !stats.isFile() ||
+      stats.size > BigInt(MAX_LOCK_BYTES) ||
+      !lockIdentityMatches(stats, expected)
     ) {
       return false;
     }
 
     const expectedBytes = Buffer.from(expected.contents, "utf8");
-    if (expectedBytes.length === 0 || stats.size !== expectedBytes.length) return false;
+    if (expectedBytes.length === 0 || stats.size !== BigInt(expectedBytes.length)) return false;
     const actual = Buffer.alloc(expectedBytes.length);
     let offset = 0;
     while (offset < actual.length) {
@@ -302,7 +342,21 @@ async function lockPathMatchesOwnership(path: string, expected: LockOwnership): 
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
-    return offset === expectedBytes.length && timingSafeEqual(actual, expectedBytes);
+    if (offset !== expectedBytes.length || !timingSafeEqual(actual, expectedBytes)) return false;
+
+    const pathStats = await lstat(path, { bigint: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    });
+    if (
+      !pathStats ||
+      pathStats.isSymbolicLink() ||
+      !pathStats.isFile() ||
+      !lockPathIdentityMatches(pathStats, expected)
+    ) {
+      return false;
+    }
+    return true;
   } catch (error) {
     if (["ENOENT", "ELOOP"].includes((error as NodeJS.ErrnoException).code ?? "")) return false;
     throw error;
@@ -326,7 +380,7 @@ async function assertOpenedLockStillOwnsPath(
   ownership: Pick<LockOwnership, "device" | "inode">,
   message: string,
 ): Promise<void> {
-  const stats = await lstat(path).catch((error) => {
+  const stats = await lstat(path, { bigint: true }).catch((error) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   });
@@ -334,8 +388,7 @@ async function assertOpenedLockStillOwnsPath(
     !stats ||
     stats.isSymbolicLink() ||
     !stats.isFile() ||
-    (process.platform !== "win32" &&
-      (stats.dev !== ownership.device || stats.ino !== ownership.inode))
+    !lockPathIdentityMatches(stats, ownership)
   ) {
     throw new MultiAccountMcpError(message, "UNSAFE_STORAGE_DIRECTORY");
   }
@@ -345,6 +398,13 @@ function staleStateLock(): MultiAccountMcpError {
   return new MultiAccountMcpError(
     "Multi-Account MCP found a stale state lock from a process that is no longer running. It was preserved because automatic deletion can race with another process. Stop all Multi-Account MCP processes, confirm none are active, then follow SECURITY.md to remove the exact `.accounts.lock` before retrying.",
     "STALE_ACCOUNT_STATE_LOCK",
+  );
+}
+
+function stateLockCleanupUncertain(): MultiAccountMcpError {
+  return new MultiAccountMcpError(
+    "An account metadata operation may have completed, but its state lock could not be safely released. Do not retry automatically or delete `.accounts.lock`. Stop all Multi-Account MCP processes, inspect `multi-account-mcp auth list`, then follow SECURITY.md to reconcile the exact lock before retrying once.",
+    "ACCOUNT_STATE_LOCK_CLEANUP_UNCERTAIN",
   );
 }
 
@@ -371,11 +431,11 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
         0o600,
       );
-      let ownedDevice = 0;
-      let ownedInode = 0;
+      let ownedDevice = 0n;
+      let ownedInode = 0n;
       const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        const ownedStats = await handle.stat();
+        const ownedStats = await handle.stat({ bigint: true });
         ownedDevice = ownedStats.dev;
         ownedInode = ownedStats.ino;
         await assertOpenedLockStillOwnsPath(
@@ -399,12 +459,23 @@ async function acquireStateLock(directory: string): Promise<() => Promise<void>>
         );
       }
       return async () => {
-        if (await lockPathMatchesOwnership(lockPath, {
-          device: ownedDevice,
-          inode: ownedInode,
-          contents: lockContents,
-        })) {
+        try {
+          if (!(await lockPathMatchesOwnership(lockPath, {
+            device: ownedDevice,
+            inode: ownedInode,
+            contents: lockContents,
+          }))) {
+            throw stateLockCleanupUncertain();
+          }
           await unlink(lockPath);
+        } catch (error) {
+          if (
+            error instanceof MultiAccountMcpError &&
+            error.code === "ACCOUNT_STATE_LOCK_CLEANUP_UNCERTAIN"
+          ) {
+            throw error;
+          }
+          throw stateLockCleanupUncertain();
         }
       };
     } catch (error) {
@@ -444,15 +515,42 @@ async function readLockPid(path: string): Promise<number | null> {
   let handle;
   try {
     const noFollow = "O_NOFOLLOW" in fsConstants ? fsConstants.O_NOFOLLOW : 0;
-    handle = await open(path, fsConstants.O_RDONLY | noFollow);
-    const buffer = Buffer.alloc(64);
+    const nonBlocking = "O_NONBLOCK" in fsConstants ? fsConstants.O_NONBLOCK : 0;
+    handle = await open(path, fsConstants.O_RDONLY | noFollow | nonBlocking);
+    const openedStats = await handle.stat({ bigint: true });
+    if (
+      !openedStats.isFile() ||
+      openedStats.size > BigInt(MAX_LOCK_BYTES) ||
+      !lockIdentityMatches(openedStats, {
+        device: openedStats.dev,
+        inode: openedStats.ino,
+      })
+    ) {
+      return null;
+    }
+    const buffer = Buffer.alloc(MAX_LOCK_BYTES);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const pathStats = await lstat(path, { bigint: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    });
+    if (
+      !pathStats ||
+      pathStats.isSymbolicLink() ||
+      !pathStats.isFile() ||
+      !lockPathIdentityMatches(pathStats, {
+        device: openedStats.dev,
+        inode: openedStats.ino,
+      })
+    ) {
+      return null;
+    }
     const match = /^(\d+)\s/.exec(buffer.subarray(0, bytesRead).toString("utf8"));
     if (!match?.[1]) return null;
     const pid = Number(match[1]);
     return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (["ENOENT", "ELOOP"].includes((error as NodeJS.ErrnoException).code ?? "")) return null;
     throw error;
   } finally {
     await handle?.close().catch(() => undefined);
@@ -491,11 +589,11 @@ async function acquireConnectLease(directory: string): Promise<ConnectLease> {
         fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | noFollow,
         0o600,
       );
-      let ownedDevice = 0;
-      let ownedInode = 0;
+      let ownedDevice = 0n;
+      let ownedInode = 0n;
       const lockContents = `${process.pid} ${randomUUID()}\n`;
       try {
-        const ownedStats = await handle.stat();
+        const ownedStats = await handle.stat({ bigint: true });
         ownedDevice = ownedStats.dev;
         ownedInode = ownedStats.ino;
         await assertOpenedLockStillOwnsPath(

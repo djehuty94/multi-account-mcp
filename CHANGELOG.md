@@ -36,8 +36,10 @@ Notable changes to Multi-Account MCP for Gmail & Drive will be recorded here.
 
 ### Fixed
 
-- Verify lock ownership with each lock's unpredictable token, while retaining device/inode checks where reliable, so Windows lease cleanup remains fail-closed without depending on unstable Windows inode identity.
+- Verify lock ownership with each lock's unpredictable token, full-precision file ID, and platform-normalized device ID, preserving replacement files and reporting cleanup uncertainty whenever ownership cannot be proven.
 - Detect pre-existing or raced symlink lock paths before writing, and preserve dead-process stale locks for explicit recovery instead of risking deletion of a replacement live lock.
+- Stop `doctor` from printing the absolute local metadata path, which can contain an operating-system username or environment-selected directory.
+- Require environment-selected configuration roots to be absolute local paths, validate lock ownership before and after descriptor reads, and bound stale-lock reads to regular files.
 - Rebuild each OAuth token request body for every DPoP nonce attempt so Gaxios error redaction cannot mutate and corrupt the mandatory retry; token request bodies and DPoP proofs are also redacted from thrown request configurations.
 - Reassert mutation-lease ownership immediately before remote revocation and again before local deletion, including cleanup revocation after a failed connection.
 - Report incomplete post-revocation local cleanup as a typed `DISCONNECT_LOCAL_CLEANUP_INCOMPLETE` recovery state instead of implying that every local artifact was removed.
