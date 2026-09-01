@@ -276,14 +276,23 @@ interface LockOwnership {
   contents: string;
 }
 
+function comparableDeviceId(device: bigint): bigint {
+  // Node 22.12's bundled libuv can report the Windows volume serial at
+  // different widths for path stat and handle stat. Upstream libuv #4698
+  // standardized both on the low unsigned 32 bits.
+  return process.platform === "win32" ? BigInt.asUintN(32, device) : device;
+}
+
 function lockIdentityMatches(
   stats: { dev: bigint; ino: bigint },
   expected: Pick<LockOwnership, "device" | "inode">,
 ): boolean {
+  const expectedDevice = comparableDeviceId(expected.device);
+  const actualDevice = comparableDeviceId(stats.dev);
   return (
-    expected.device !== 0n &&
+    expectedDevice !== 0n &&
     expected.inode !== 0n &&
-    stats.dev === expected.device &&
+    actualDevice === expectedDevice &&
     stats.ino === expected.inode
   );
 }
@@ -504,7 +513,7 @@ async function readLockPid(path: string): Promise<number | null> {
     if (
       !openedStats.isFile() ||
       openedStats.size > BigInt(MAX_LOCK_BYTES) ||
-      openedStats.dev === 0n ||
+      comparableDeviceId(openedStats.dev) === 0n ||
       openedStats.ino === 0n
     ) {
       return null;
@@ -519,7 +528,7 @@ async function readLockPid(path: string): Promise<number | null> {
       !pathStats ||
       pathStats.isSymbolicLink() ||
       !pathStats.isFile() ||
-      pathStats.dev !== openedStats.dev ||
+      comparableDeviceId(pathStats.dev) !== comparableDeviceId(openedStats.dev) ||
       pathStats.ino !== openedStats.ino
     ) {
       return null;

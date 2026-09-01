@@ -36,7 +36,7 @@ Notable changes to Multi-Account MCP for Gmail & Drive will be recorded here.
 
 ### Fixed
 
-- Verify lock ownership with each lock's unpredictable token and exact BigInt device/inode identity on every platform, preserving replacement files and reporting cleanup uncertainty whenever ownership cannot be proven.
+- Verify lock ownership with each lock's unpredictable token, full-precision file ID, and platform-normalized device ID, preserving replacement files and reporting cleanup uncertainty whenever ownership cannot be proven.
 - Detect pre-existing or raced symlink lock paths before writing, and preserve dead-process stale locks for explicit recovery instead of risking deletion of a replacement live lock.
 - Stop `doctor` from printing the absolute local metadata path, which can contain an operating-system username or environment-selected directory.
 - Require environment-selected configuration roots to be absolute local paths, validate lock ownership before and after descriptor reads, and bound stale-lock reads to regular files.
