@@ -4,6 +4,7 @@ import { once } from "node:events";
 import {
   lstat,
   mkdtemp,
+  open,
   readFile,
   rename,
   rm,
@@ -47,6 +48,49 @@ test("default state root rejects a relative environment override", () => {
     else process.env.MULTI_ACCOUNT_MCP_HOME = previous;
   }
 });
+
+test(
+  "Windows path and handle file identities are comparable",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-identity-"));
+    const filePath = join(directory, "identity.lock");
+    const handle = await open(filePath, "wx", 0o600);
+    try {
+      await handle.writeFile("identity-check\n", "utf8");
+      await handle.sync();
+      const handleStats = await handle.stat({ bigint: true });
+      const pathStats = await lstat(filePath, { bigint: true });
+
+      assert.deepEqual(
+        {
+          bothRegularFiles: handleStats.isFile() && pathStats.isFile(),
+          rawDeviceMatches: handleStats.dev === pathStats.dev,
+          low32DeviceMatches:
+            BigInt.asUintN(32, handleStats.dev) === BigInt.asUintN(32, pathStats.dev),
+          handleDeviceIsZero: handleStats.dev === 0n,
+          pathDeviceIsZero: pathStats.dev === 0n,
+          inodeMatches: handleStats.ino === pathStats.ino,
+          handleInodeIsZero: handleStats.ino === 0n,
+          pathInodeIsZero: pathStats.ino === 0n,
+        },
+        {
+          bothRegularFiles: true,
+          rawDeviceMatches: true,
+          low32DeviceMatches: true,
+          handleDeviceIsZero: false,
+          pathDeviceIsZero: false,
+          inodeMatches: true,
+          handleInodeIsZero: false,
+          pathInodeIsZero: false,
+        },
+      );
+    } finally {
+      await handle.close().catch(() => undefined);
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 test("metadata is atomic, contains no tokens, and is mode 0600", async () => {
   const directory = await mkdtemp(join(tmpdir(), "multi-account-mcp-store-"));
